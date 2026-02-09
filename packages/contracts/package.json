@@ -1,0 +1,28 @@
+{
+  "name": "contracts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:alfajores": "hardhat run scripts/deploy.ts --network alfajores",
+    "seed:alfajores": "hardhat run scripts/seed.ts --network alfajores"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-network-helpers": "^3.0.0",
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.2",
+    "@nomicfoundation/hardhat-verify": "^3.0.0",
+    "dotenv": "^17.2.4",
+    "forge-std": "github:foundry-rs/forge-std#v1.9.4",
+    "hardhat": "^3.1.7",
+    "viem": "^2.45.2"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.4.0"
+  },
+  "type": "module"
+}
