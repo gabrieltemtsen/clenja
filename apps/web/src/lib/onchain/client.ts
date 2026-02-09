@@ -38,13 +38,13 @@ export function getPublicClient(chain: SupportedChain = "alfajores") {
 
 // Create wallet client for transactions (browser only)
 export function getWalletClient(chain: SupportedChain = "alfajores") {
-    if (typeof window === "undefined" || !window.ethereum) {
+    if (typeof window === "undefined" || !(window as any).ethereum) {
         return null;
     }
 
     return createWalletClient({
         chain: SUPPORTED_CHAINS[chain],
-        transport: custom(window.ethereum),
+        transport: custom((window as any).ethereum),
     });
 }
 

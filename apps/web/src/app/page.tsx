@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useWallet, usePoolStats, formatCUSD, formatPercent } from "@/lib/onchain";
 
 export default function Home() {
@@ -33,8 +34,13 @@ export default function Home() {
             No intermediaries; just smart contracts on Celo.
           </p>
 
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in" style={{ animationDelay: "0.3s" }}>
-            {address ? (
+            {!address ? (
+              <div className="flex justify-center">
+                <ConnectButton />
+              </div>
+            ) : (
               <>
                 <Link href="/deposit" className="btn-primary text-center">
                   Deposit & Earn
@@ -43,21 +49,6 @@ export default function Home() {
                   Borrow Funds
                 </Link>
               </>
-            ) : (
-              <button
-                onClick={connect}
-                disabled={isConnecting}
-                className="btn-primary flex items-center justify-center gap-2"
-              >
-                {isConnecting ? (
-                  <>
-                    <span className="spinner" />
-                    Connecting...
-                  </>
-                ) : (
-                  "Connect Wallet"
-                )}
-              </button>
             )}
           </div>
         </div>
@@ -143,21 +134,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Wallet Status Footer */}
-      {address && (
-        <div className="fixed bottom-4 right-4 glass-card px-4 py-3 flex items-center gap-3">
-          <span className="w-2 h-2 bg-green-400 rounded-full" />
-          <span className="text-sm text-gray-400">
-            {address.slice(0, 6)}...{address.slice(-4)}
-          </span>
-          <button
-            onClick={disconnect}
-            className="text-sm text-red-400 hover:text-red-300"
-          >
-            Disconnect
-          </button>
-        </div>
-      )}
+      {/* Wallet Status Footer - Managed by RainbowKit */}
     </main>
   );
 }

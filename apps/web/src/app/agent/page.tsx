@@ -2,14 +2,12 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { useChat } from "ai/react";
+import { useChat } from "@ai-sdk/react";
 
 export default function AgentPage() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
-        api: "/api/chat",
-    });
+    const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat() as any;
 
     // Scroll to bottom on new messages
     useEffect(() => {
@@ -65,7 +63,7 @@ export default function AgentPage() {
                             </div>
                         </div>
                     ) : (
-                        messages.map((message) => (
+                        messages.map((message: any) => (
                             <MessageBubble key={message.id} message={message} />
                         ))
                     )}
@@ -101,7 +99,7 @@ export default function AgentPage() {
                         />
                         <button
                             type="submit"
-                            disabled={isLoading || !input.trim()}
+                            disabled={isLoading || !(input || "").trim()}
                             className="btn-primary px-6"
                         >
                             {isLoading ? (
@@ -124,8 +122,8 @@ function MessageBubble({ message }: { message: { role: string; content: string; 
         <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
             <div
                 className={`max-w-[80%] rounded-2xl px-4 py-3 ${isUser
-                        ? "bg-green-500/20 border border-green-500/30 text-white"
-                        : "glass-card text-gray-100"
+                    ? "bg-green-500/20 border border-green-500/30 text-white"
+                    : "glass-card text-gray-100"
                     }`}
             >
                 {/* Message content */}

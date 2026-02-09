@@ -24,7 +24,7 @@ export const getPoolStats = tool({
             message: `Pool has $${mockStats.totalAssets} TVL with ${mockStats.utilizationPercent}% utilization. $${mockStats.availableLiquidity} available for new loans.`,
         };
     },
-});
+} as any);
 
 // Quote loan terms tool
 export const quoteLoan = tool({
@@ -33,7 +33,7 @@ export const quoteLoan = tool({
         amount: z.number().describe("Loan amount in cUSD (e.g., 100 for $100)"),
         durationDays: z.number().describe("Loan duration in days (7-90)"),
     }),
-    execute: async ({ amount, durationDays }) => {
+    execute: async ({ amount, durationDays }: { amount: number, durationDays: number }) => {
         // Validate inputs
         if (amount < 10 || amount > 10000) {
             return {
@@ -75,7 +75,7 @@ export const quoteLoan = tool({
             message: `For a $${amount} loan over ${durationDays} days at ${recommendedApr.toFixed(1)}% APR: you'll repay $${totalRepayment.toFixed(2)} (principal + $${interest.toFixed(2)} interest).`,
         };
     },
-});
+} as any);
 
 // Check borrower eligibility tool
 export const checkEligibility = tool({
@@ -83,7 +83,7 @@ export const checkEligibility = tool({
     parameters: z.object({
         walletAddress: z.string().describe("The borrower's Ethereum wallet address"),
     }),
-    execute: async ({ walletAddress }) => {
+    execute: async ({ walletAddress }: { walletAddress: string }) => {
         // Validate address format
         if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
             return {
@@ -112,7 +112,7 @@ export const checkEligibility = tool({
                 : "Wallet is not verified. Complete verification through SelfClaw to enable borrowing.",
         };
     },
-});
+} as any);
 
 // Get active loans tool
 export const getActiveLoans = tool({
@@ -120,7 +120,7 @@ export const getActiveLoans = tool({
     parameters: z.object({
         walletAddress: z.string().describe("The borrower's wallet address"),
     }),
-    execute: async ({ walletAddress }) => {
+    execute: async ({ walletAddress }: { walletAddress: string }) => {
         if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
             return {
                 success: false,
@@ -158,7 +158,7 @@ export const getActiveLoans = tool({
             message: `Found ${mockLoans.length} active loan(s). Total owed: $${mockLoans.reduce((sum, l) => sum + parseFloat(l.totalOwed), 0).toFixed(2)}.`,
         };
     },
-});
+} as any);
 
 // Calculate repayment tool
 export const calculateRepayment = tool({
@@ -166,7 +166,7 @@ export const calculateRepayment = tool({
     parameters: z.object({
         loanId: z.string().describe("The loan ID to calculate repayment for"),
     }),
-    execute: async ({ loanId }) => {
+    execute: async ({ loanId }: { loanId: string }) => {
         // Mock calculation - in production would call contract
         const loan = {
             id: loanId,
@@ -181,7 +181,7 @@ export const calculateRepayment = tool({
             message: `Loan #${loanId} requires $${loan.totalToClose} to fully close ($${loan.remainingPrincipal} principal + $${loan.accruedInterest} interest).`,
         };
     },
-});
+} as any);
 
 // Export all tools
 export const agentTools = {

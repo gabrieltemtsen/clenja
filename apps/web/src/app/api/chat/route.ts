@@ -36,7 +36,7 @@ export async function POST(req: Request) {
         messages,
         tools: agentTools,
         maxSteps: 5, // Allow multiple tool calls
-    });
+    } as any);
 
-    return result.toDataStreamResponse();
+    return (result as any).toDataStreamResponse();
 }

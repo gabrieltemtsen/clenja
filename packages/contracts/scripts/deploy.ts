@@ -1,5 +1,11 @@
-import hre from "hardhat";
-import { formatEther, parseEther } from "viem";
+import { createPublicClient, createWalletClient, http, formatEther, parseEther } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { celoAlfajores, celo } from "viem/chains";
+import { readFileSync } from "fs";
+import { join } from "path";
+
+// Load dotenv
+import "dotenv/config";
 
 /**
  * Deploy all Clenja contracts to the network
@@ -10,16 +16,46 @@ import { formatEther, parseEther } from "viem";
  * - ALFAJORES_RPC_URL: Celo Alfajores RPC URL
  * - PRIVATE_KEY: Deployer private key
  */
+
+// Load contract artifacts
+function loadArtifact(name: string) {
+    const artifactPath = join(process.cwd(), "artifacts/contracts", name + ".sol", name + ".json");
+    return JSON.parse(readFileSync(artifactPath, "utf-8"));
+}
+
 async function main() {
     console.log("🚀 Deploying Clenja contracts...\n");
 
-    // Get signers
-    const [deployer] = await hre.network.provider.getWalletClients();
-    const deployerAddress = deployer.account.address;
+    // Setup from env
+    const privateKey = process.env.PRIVATE_KEY as `0x${string}`;
+    if (!privateKey) {
+        throw new Error("PRIVATE_KEY not set in environment");
+    }
 
+    const network = process.env.NETWORK || "alfajores";
+    const chain = network === "celo" ? celo : celoAlfajores;
+    const rpcUrl = network === "celo"
+        ? process.env.CELO_RPC_URL
+        : process.env.ALFAJORES_RPC_URL || "https://alfajores-forno.celo-testnet.org";
+
+    console.log("Network:", chain.name);
+    console.log("RPC:", rpcUrl, "\n");
+
+    // Create clients
+    const account = privateKeyToAccount(privateKey);
+    const walletClient = createWalletClient({
+        account,
+        chain,
+        transport: http(rpcUrl),
+    });
+    const publicClient = createPublicClient({
+        chain,
+        transport: http(rpcUrl),
+    });
+
+    const deployerAddress = account.address;
     console.log("Deployer:", deployerAddress);
 
-    const publicClient = await hre.network.provider.getPublicClient();
     const balance = await publicClient.getBalance({ address: deployerAddress });
     console.log("Balance:", formatEther(balance), "CELO\n");
 
@@ -28,15 +64,37 @@ async function main() {
     const CUSD_ADDRESS = process.env.CUSD_ADDRESS || "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1"; // Alfajores cUSD
     console.log("Using cUSD address:", CUSD_ADDRESS, "\n");
 
+    // Load artifacts
+    const MockVerifierArtifact = loadArtifact("MockVerifier");
+    const PoolVaultArtifact = loadArtifact("PoolVault");
+    const RiskRulesArtifact = loadArtifact("RiskRules");
+    const LoanManagerArtifact = loadArtifact("LoanManager");
+
+    // Helper to deploy contract
+    async function deployContract(name: string, artifact: { abi: any; bytecode: `0x${string}` }, args: any[]) {
+        console.log(`   Deploying ${name}...`);
+        const hash = await walletClient.deployContract({
+            abi: artifact.abi,
+            bytecode: artifact.bytecode as `0x${string}`,
+            args,
+        });
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        if (!receipt.contractAddress) {
+            throw new Error(`Failed to deploy ${name}`);
+        }
+        console.log(`   ${name} deployed to: ${receipt.contractAddress}`);
+        return receipt.contractAddress;
+    }
+
     // 1. Deploy MockVerifier
     console.log("1️⃣ Deploying MockVerifier...");
-    const mockVerifier = await hre.viem.deployContract("MockVerifier", [deployerAddress]);
-    console.log("   MockVerifier deployed to:", mockVerifier.address, "\n");
+    const mockVerifierAddress = await deployContract("MockVerifier", MockVerifierArtifact, [deployerAddress]);
+    console.log("");
 
     // 2. Deploy PoolVault
     console.log("2️⃣ Deploying PoolVault...");
-    const poolVault = await hre.viem.deployContract("PoolVault", [CUSD_ADDRESS, deployerAddress]);
-    console.log("   PoolVault deployed to:", poolVault.address, "\n");
+    const poolVaultAddress = await deployContract("PoolVault", PoolVaultArtifact, [CUSD_ADDRESS, deployerAddress]);
+    console.log("");
 
     // 3. Deploy RiskRules with reasonable defaults
     console.log("3️⃣ Deploying RiskRules...");
@@ -51,9 +109,9 @@ async function main() {
         requireVerified: true,
     };
 
-    const riskRules = await hre.viem.deployContract("RiskRules", [
+    const riskRulesAddress = await deployContract("RiskRules", RiskRulesArtifact, [
         deployerAddress,
-        mockVerifier.address,
+        mockVerifierAddress,
         riskRulesConfig.maxBorrowerBps,
         riskRulesConfig.maxUtilizationBps,
         riskRulesConfig.maxLoanDuration,
@@ -63,37 +121,42 @@ async function main() {
         riskRulesConfig.maxLoanAmount,
         riskRulesConfig.requireVerified,
     ]);
-    console.log("   RiskRules deployed to:", riskRules.address, "\n");
+    console.log("");
 
     // 4. Deploy LoanManager
     console.log("4️⃣ Deploying LoanManager...");
     const agentFeeBps = 1000n; // 10% of interest goes to agent
     const agentTreasury = deployerAddress; // Use deployer as treasury for now
 
-    const loanManager = await hre.viem.deployContract("LoanManager", [
+    const loanManagerAddress = await deployContract("LoanManager", LoanManagerArtifact, [
         CUSD_ADDRESS,
-        poolVault.address,
-        riskRules.address,
+        poolVaultAddress,
+        riskRulesAddress,
         deployerAddress,
         agentTreasury,
         agentFeeBps,
     ]);
-    console.log("   LoanManager deployed to:", loanManager.address, "\n");
+    console.log("");
 
     // 5. Configure PoolVault to use LoanManager
     console.log("5️⃣ Configuring PoolVault...");
-    const hash = await poolVault.write.setLoanManager([loanManager.address]);
-    await publicClient.waitForTransactionReceipt({ hash });
+    const setLoanManagerHash = await walletClient.writeContract({
+        address: poolVaultAddress,
+        abi: PoolVaultArtifact.abi,
+        functionName: "setLoanManager",
+        args: [loanManagerAddress],
+    });
+    await publicClient.waitForTransactionReceipt({ hash: setLoanManagerHash });
     console.log("   LoanManager set on PoolVault ✅\n");
 
     // Summary
     console.log("=".repeat(60));
     console.log("✅ Deployment Complete!\n");
     console.log("Contract Addresses:");
-    console.log("  MockVerifier:", mockVerifier.address);
-    console.log("  PoolVault:", poolVault.address);
-    console.log("  RiskRules:", riskRules.address);
-    console.log("  LoanManager:", loanManager.address);
+    console.log("  MockVerifier:", mockVerifierAddress);
+    console.log("  PoolVault:", poolVaultAddress);
+    console.log("  RiskRules:", riskRulesAddress);
+    console.log("  LoanManager:", loanManagerAddress);
     console.log("\nConfiguration:");
     console.log("  cUSD Address:", CUSD_ADDRESS);
     console.log("  Agent Fee:", Number(agentFeeBps) / 100, "% of interest");
@@ -101,12 +164,17 @@ async function main() {
     console.log("  Max Utilization:", Number(riskRulesConfig.maxUtilizationBps) / 100, "%");
     console.log("=".repeat(60));
 
+    console.log("\n📋 Add these to your apps/web/.env.local:");
+    console.log(`NEXT_PUBLIC_POOL_VAULT_ADDRESS=${poolVaultAddress}`);
+    console.log(`NEXT_PUBLIC_LOAN_MANAGER_ADDRESS=${loanManagerAddress}`);
+    console.log(`NEXT_PUBLIC_RISK_RULES_ADDRESS=${riskRulesAddress}`);
+
     // Return addresses for use in seed script
     return {
-        mockVerifier: mockVerifier.address,
-        poolVault: poolVault.address,
-        riskRules: riskRules.address,
-        loanManager: loanManager.address,
+        mockVerifier: mockVerifierAddress,
+        poolVault: poolVaultAddress,
+        riskRules: riskRulesAddress,
+        loanManager: loanManagerAddress,
         cUSD: CUSD_ADDRESS,
     };
 }
