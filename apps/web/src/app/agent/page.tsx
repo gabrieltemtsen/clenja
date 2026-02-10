@@ -7,12 +7,27 @@ import { useChat } from "@ai-sdk/react";
 export default function AgentPage() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat() as any;
+    const { messages, append, input, handleInputChange, isLoading, error } = useChat();
 
     // Scroll to bottom on new messages
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
+
+    const handleSend = async (text: string) => {
+        if (!text.trim()) return;
+
+        try {
+            await append({ role: "user", content: text });
+        } catch (e) {
+            console.error("Failed to send message:", e);
+        }
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        handleSend(input);
+    };
 
     const suggestedPrompts = [
         "What's the current pool status?",
@@ -52,9 +67,7 @@ export default function AgentPage() {
                                 {suggestedPrompts.map((prompt, i) => (
                                     <button
                                         key={i}
-                                        onClick={() => {
-                                            handleInputChange({ target: { value: prompt } } as React.ChangeEvent<HTMLInputElement>);
-                                        }}
+                                        onClick={() => handleSend(prompt)}
                                         className="px-4 py-2 glass-card text-sm hover:border-green-500/40 transition-colors"
                                     >
                                         {prompt}
@@ -99,7 +112,7 @@ export default function AgentPage() {
                         />
                         <button
                             type="submit"
-                            disabled={isLoading || !(input || "").trim()}
+                            disabled={isLoading || !input.trim()}
                             className="btn-primary px-6"
                         >
                             {isLoading ? (
