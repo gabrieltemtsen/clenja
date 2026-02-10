@@ -1,6 +1,6 @@
 import { openai } from "@ai-sdk/openai";
 import { streamText } from "ai";
-import { agentTools } from "@/lib/agent";
+import { getAgentTools } from "@/lib/agent/tools";
 
 // System prompt for the Clenja lending agent
 const SYSTEM_PROMPT = `You are Clenja, a helpful AI assistant for the Clenja cooperative micro-lending platform on Celo.
@@ -30,13 +30,15 @@ If they want to deposit, guide them to the /deposit page.`;
 export async function POST(req: Request) {
     const { messages } = await req.json();
 
-    const result = streamText({
+    // Get all tools (GOAT SDK + custom Clenja tools)
+    const tools = await getAgentTools();
+
+    const result = await streamText({
         model: openai("gpt-4o-mini"),
         system: SYSTEM_PROMPT,
         messages,
-        tools: agentTools,
-        maxSteps: 5, // Allow multiple tool calls
-    } as any);
+        tools,
+    });
 
-    return (result as any).toDataStreamResponse();
+    return result.toAIStreamResponse();
 }
