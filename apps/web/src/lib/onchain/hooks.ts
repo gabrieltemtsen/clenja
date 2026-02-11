@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { formatEther, type Address } from "viem";
+import { formatEther, type Address, erc20Abi } from "viem";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { getContractAddresses, type SupportedChain } from "./client";
-import { poolVaultAbi, loanManagerAbi, erc20Abi } from "./abis";
+import { poolVaultAbi, loanManagerAbi } from "./abis";
 
 // ============ Wallet Connection ============
 
@@ -321,44 +321,82 @@ export function useUserLoans(address: Address | null | undefined, chain: Support
         try {
             setIsLoading(true);
 
-            // Get loan IDs
-            const loanIds = await publicClient.readContract({
+            // Fetch total loan count
+            const count = await publicClient.readContract({
                 address: addresses.loanManager,
                 abi: loanManagerAbi,
-                functionName: "borrowerLoans",
-                args: [address],
-            }) as bigint[];
+                functionName: "loanCount",
+            }) as bigint;
 
-            if (!loanIds.length) {
+            if (count === 0n) {
                 setLoans([]);
                 return;
             }
 
-            // Fetch loans (Promise.all)
-            // Note: In production use multicall
-            const loanPromises = loanIds.map(async (id) => {
-                const loan = await publicClient.readContract({
+            // Fetch all loans and filter (inefficient but works for MVP)
+            // In production, use The Graph or an indexer
+            const loanPromises = [];
+            for (let i = 1n; i <= count; i++) {
+                loanPromises.push(publicClient.readContract({
                     address: addresses.loanManager!,
                     abi: loanManagerAbi,
-                    functionName: "getLoan",
-                    args: [id],
-                }) as [Address, bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
+                    functionName: "loans", // "loans" mapping, not getLoan (struct access might be different)
+                    args: [i],
+                }));
+            }
 
-                return {
-                    id,
-                    borrower: loan[0],
-                    principal: loan[1],
-                    aprBps: loan[2],
-                    startTime: loan[3],
-                    duration: loan[4],
-                    principalRepaid: loan[5],
-                    interestPaid: loan[6],
-                    active: loan[7],
-                    disbursed: loan[8],
-                };
-            });
+            const results = await Promise.all(loanPromises);
 
-            setLoans(await Promise.all(loanPromises));
+            const userLoans = results
+                .map((loanData: any, index) => {
+                    // Map result to Loan object
+                    // Solc mapping returns tuple values, not struct object usually
+                    // mapping(uint256 => Loan) public loans;
+                    // Returns: (borrower, principal, principalRepaid, interestPaid, aprBps, startTime, duration, lastPaymentTime, metadataHash, active, disbursed)
+                    return {
+                        id: BigInt(index + 1),
+                        borrower: loanData[0],
+                        principal: loanData[1],
+                        principalRepaid: loanData[2],
+                        interestPaid: loanData[3],
+                        aprBps: loanData[4],
+                        startTime: loanData[6], // Skip startTime? No, wait. 
+                        // Struct: borrower, principal, principalRepaid, interestPaid, aprBps, startTime, duration, lastPaymentTime, metadataHash, active, disbursed
+                        // Indices: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+                        duration: loanData[6],
+                        active: loanData[9],
+                        disbursed: loanData[10],
+                    };
+                })
+                .filter(loan => loan.borrower.toLowerCase() === address.toLowerCase());
+
+            // Fix mapping indices:
+            // 0: borrower
+            // 1: principal
+            // 2: principalRepaid
+            // 3: interestPaid
+            // 4: aprBps
+            // 5: startTime
+            // 6: duration
+            // 7: lastPaymentTime
+            // 8: metadataHash
+            // 9: active
+            // 10: disbursed
+
+            const mappedLoans = results.map((loanData: any, index) => ({
+                id: BigInt(index + 1),
+                borrower: loanData[0],
+                principal: loanData[1],
+                principalRepaid: loanData[2],
+                interestPaid: loanData[3],
+                aprBps: loanData[4],
+                startTime: loanData[5],
+                duration: loanData[6],
+                active: loanData[9],
+                disbursed: loanData[10],
+            })).filter(l => l.borrower.toLowerCase() === address.toLowerCase());
+
+            setLoans(mappedLoans);
         } catch (err) {
             console.error("Failed to fetch loans:", err);
         } finally {

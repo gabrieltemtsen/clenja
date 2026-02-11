@@ -4,6 +4,8 @@ import { createPublicClient, http, formatEther } from "viem";
 import { celoAlfajores } from "viem/chains";
 import { PoolVaultABI } from "@/lib/onchain/abis";
 import { CONTRACT_ADDRESSES } from "@/lib/onchain/client";
+import { sendMessage } from "../communication";
+import { postToMoltbook, searchMoltbookAgents, getMoltbookProfile } from "./moltbook";
 
 // Initialize public client for server-side reads
 const publicClient = createPublicClient({
@@ -17,11 +19,17 @@ const publicClient = createPublicClient({
 
 export const getPoolStats = tool({
     description: "Get current Clenja lending pool statistics including TVL, liquidity, and utilization",
-    parameters: z.object({}),
-    execute: async () => {
+    parameters: z.object({
+        token: z.enum(["cUSD", "CELO"]).optional().describe("Token symbol (default: cUSD)"),
+    }),
+    execute: async ({ token = "cUSD" }: { token?: "cUSD" | "CELO" }) => {
         try {
-            const vaultAddress = CONTRACT_ADDRESSES.alfajores.poolVault;
-            if (!vaultAddress) throw new Error("Pool Vault address not configured");
+            // Get correct vault based on chain and token
+            // Hardcoding 'alfajores' type for now, but client handles logic
+            const addresses = CONTRACT_ADDRESSES.alfajores.tokens[token];
+            const vaultAddress = addresses?.vault;
+
+            if (!vaultAddress) throw new Error(`${token} Pool Vault not configured`);
 
             // Fetch real data from chain
             // Assuming standard ERC4626 totalAssets
@@ -46,10 +54,11 @@ export const getPoolStats = tool({
             return {
                 success: true,
                 data: {
+                    token,
                     totalAssets: parseFloat(totalAssets).toFixed(2),
                     ...mockDerivedStats
                 },
-                message: `Pool has $${parseFloat(totalAssets).toFixed(2)} TVL. (Real on-chain data)`,
+                message: `${token} Pool has ${parseFloat(totalAssets).toFixed(2)} ${token} TVL.`,
             };
         } catch (error) {
             console.error("Failed to fetch pool stats:", error);
@@ -57,6 +66,7 @@ export const getPoolStats = tool({
             return {
                 success: false,
                 data: {
+                    token,
                     totalAssets: "50000.00",
                     availableLiquidity: "35000.00",
                     outstandingLoans: "15000.00",
@@ -128,14 +138,15 @@ export const deposit = tool({
     description: "Prepare deposit",
     parameters: z.object({
         amount: z.number().describe("Amount"),
+        token: z.enum(["cUSD", "CELO"]).optional().describe("Token symbol (default: cUSD)"),
     }),
-    execute: async ({ amount }: { amount: number }) => {
+    execute: async ({ amount, token = "cUSD" }: { amount: number, token?: "cUSD" | "CELO" }) => {
         return {
             success: true,
             requiresAction: true,
             actionType: "DEPOSIT",
-            data: { amount: amount.toString(), token: "cUSD" },
-            message: "Sign deposit",
+            data: { amount: amount.toString(), token },
+            message: `Sign ${token} deposit`,
         };
     },
 });
@@ -145,14 +156,15 @@ export const requestLoan = tool({
     parameters: z.object({
         amount: z.number().describe("Amount"),
         durationDays: z.number().describe("Duration"),
+        token: z.enum(["cUSD", "CELO"]).optional().describe("Token (default: cUSD)"),
     }),
-    execute: async ({ amount, durationDays }: { amount: number, durationDays: number }) => {
+    execute: async ({ amount, durationDays, token = "cUSD" }: { amount: number, durationDays: number, token?: "cUSD" | "CELO" }) => {
         return {
             success: true,
             requiresAction: true,
             actionType: "BORROW",
-            data: { amount: amount.toString(), durationDays },
-            message: "Sign loan request",
+            data: { amount: amount.toString(), durationDays, token },
+            message: `Sign ${token} loan request`,
         };
     },
 });
@@ -180,7 +192,6 @@ export const repayLoan = tool({
 
 import { getOnChainTools } from "@goat-sdk/adapter-vercel-ai";
 import { viem } from "@goat-sdk/wallet-viem";
-import { erc20 } from "@goat-sdk/plugin-erc20";
 import { getAgentWalletClient } from "../wallet";
 
 // Custom Clenja tools
@@ -192,6 +203,10 @@ const customTools = {
     deposit,
     requestLoan,
     repayLoan,
+    sendMessage,
+    postToMoltbook,
+    searchMoltbookAgents,
+    getMoltbookProfile,
 };
 
 /**
@@ -203,18 +218,8 @@ export async function getAgentTools() {
 
         // Get GOAT's on-chain tools with ERC20 plugin for cUSD
         const onChainTools = await getOnChainTools({
-            wallet: viem(walletClient),
-            plugins: [
-                erc20({
-                    tokens: [
-                        {
-                            address: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
-                            symbol: "cUSD",
-                            decimals: 18,
-                        },
-                    ],
-                }),
-            ],
+            wallet: viem(walletClient as any),
+            plugins: [],
         });
 
         return {
