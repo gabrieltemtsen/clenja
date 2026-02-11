@@ -62,6 +62,24 @@ export default function AgentPage() {
                                 I can help you check pool stats, get loan quotes, track your loans, and answer questions about cooperative lending.
                             </p>
 
+                            {/* Hackathon Identity Badge */}
+                            <div className="mb-6 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs">
+                                <span>🆔 ERC-8004 Agent ID:</span>
+                                <span className="font-mono font-bold">#104</span>
+                                <span className="text-gray-500 ml-1">(Mock)</span>
+                            </div>
+
+                            {/* Message Log (Hackathon Demo) */}
+                            <div className="mb-8 p-3 rounded-lg bg-gray-900/50 border border-gray-800 max-w-sm mx-auto text-left">
+                                <div className="text-xs text-gray-500 mb-2 uppercase tracking-wider font-semibold">Incoming Messages</div>
+                                <div className="text-xs text-gray-400 font-mono">
+                                    <div className="flex gap-2">
+                                        <span className="text-green-500">➜</span>
+                                        <span>Waiting for messages...</span>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Suggested Prompts */}
                             <div className="flex flex-wrap justify-center gap-2">
                                 {suggestedPrompts.map((prompt, i) => (
@@ -124,7 +142,7 @@ export default function AgentPage() {
                     </div>
                 </form>
             </div>
-        </main>
+        </main >
     );
 }
 
